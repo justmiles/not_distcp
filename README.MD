@@ -44,3 +44,4 @@ or a from a list of files
           -cmdenv AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
           -cmdenv AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
           -cmdenv PARALLELISM=3
+

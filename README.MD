@@ -22,3 +22,25 @@ Pipe a list of file names (full path) into not_distcp
 or a from a list of files
 
     ./bin/not_distcp-0.0.2-linux < mylist.txt
+
+### Use with Map Reduce
+1. Copy your list of files to copy onto HDFS
+
+    hadoop fs -copyFromLocal mylist.txt /user/hdfs/mylist.txt
+
+1. Use the hadoop-streaming jar to submit a custom MR job to the cluster
+    
+    hadoop jar $HADOOP_HOME/hadoop-mapreduce/hadoop-streaming.jar \
+      -D mapreduce.job.maps=20 \
+      -D mapred.reduce.tasks=0 \
+      -D mapred.task.timeout=1200000 \
+      -D mapred.max.map.failures.percent=50 \
+      -files ./bin/not_distcp \
+      -mapper "./not_distcp" \
+      -input /user/hdfs/mylist.txt \
+      -output /user/hdfs/mylist.txt.results \
+      -cmdenv NAMENODE=$NAMENODE \
+      -cmdenv S3_BUCKET=mybucket \
+      -cmdenv AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
+      -cmdenv AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
+      -cmdenv PARALLELISM=3

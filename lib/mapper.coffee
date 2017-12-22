@@ -54,16 +54,22 @@ processLine = (line, callback) ->
       status "[WEBHDFS_ERROR] #{line} #{error}"
     
     remoteFileStream.on 'finish', ->
-      status "[CACHED] #{line}"
-      counter 'CACHED'
-      s3obj = new AWS.S3.ManagedUpload
-        params:
-          Bucket: process.env['S3_BUCKET']
-          Key: (process.env['S3_PREFIX'] or '')+line+'.gz'
-          Body: fs.createReadStream(tmpfile)
+      hdfs.stat line, (err, res) ->
+        if err
+          counter 'HDFS_ERROR'
+          status "[WEBHDFS_ERROR] #{line} #{err}"
+          return callback err
+        else
+          status "[CACHED] #{line}"
+          counter 'CACHED'
+          s3obj = new AWS.S3.ManagedUpload
+            params:
+              Bucket: process.env['S3_BUCKET']
+              Key: (process.env['S3_PREFIX'] or '')+line+'.gz'
+              Body: fs.createReadStream(tmpfile)
           
-      s3obj.on 'httpUploadProgress', logProgress
-      uploader s3obj, line, tmpfile, retries=3, callback
+          s3obj.on 'httpUploadProgress', logProgress
+          uploader s3obj, line, tmpfile, retries=3, callback
 
 module.exports = ->
 

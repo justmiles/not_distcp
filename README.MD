@@ -26,7 +26,7 @@ or a from a list of files
 ### Use with Map Reduce
 1. Copy your list of files to copy onto HDFS
 
-    hadoop fs -copyFromLocal mylist.txt /user/hdfs/mylist.txt
+        hadoop fs -copyFromLocal mylist.txt /user/hdfs/mylist.txt
 
 1. Use the hadoop-streaming jar to submit a custom MR job to the cluster
 

@@ -42,34 +42,59 @@ uploader = (s3obj, line, tmpfile, retries= 3, callback) ->
       do callback
 
 processLine = (line, callback) ->
-  
-    remoteFileStream = hdfs.createReadStream(line)
-    tmpfile = 's3_cache_' + shortid.generate()
-    wstream = fs.createWriteStream(tmpfile)
-    status "[CACHING] #{line}"
-    counter 'CACHING'
-    remoteFileStream.pipe(zlib.createGzip()).pipe(wstream)
+  s3params = 
+    Bucket: process.env['S3_BUCKET']
+    Key: (process.env['S3_PREFIX'] or '')+line+'.gz'
     
-    remoteFileStream.on 'error', (error) ->
-      status "[WEBHDFS_ERROR] #{line} #{error}"
+  async.waterfall [
     
-    remoteFileStream.on 'finish', ->
-      hdfs.stat line, (err, res) ->
-        if err
-          counter 'HDFS_ERROR'
-          status "[WEBHDFS_ERROR] #{line} #{err}"
-          return callback err
-        else
-          status "[CACHED] #{line}"
-          counter 'CACHED'
-          s3obj = new AWS.S3.ManagedUpload
-            params:
-              Bucket: process.env['S3_BUCKET']
-              Key: (process.env['S3_PREFIX'] or '')+line+'.gz'
-              Body: fs.createReadStream(tmpfile)
-          
-          s3obj.on 'httpUploadProgress', logProgress
-          uploader s3obj, line, tmpfile, retries=3, callback
+    # Gzip HDFS file to local cache
+    (cb) ->
+      remoteFileStream = hdfs.createReadStream(line)
+      tmpfile = 's3_cache_' + shortid.generate()
+      wstream = fs.createWriteStream(tmpfile)
+      status "[CACHING] #{line}"
+      counter 'CACHING'
+      remoteFileStream.pipe(zlib.createGzip()).pipe(wstream)
+
+      remoteFileStream.on 'error', (error) ->
+        status "[WEBHDFS_ERROR] #{line} #{error}"
+
+      remoteFileStream.on 'finish', ->
+        hdfs.stat line, (err, res) ->
+          cb err, tmpfile
+          if err
+            counter 'HDFS_ERROR'
+            status "[WEBHDFS_ERROR] #{line} #{err}"
+          else
+            status "[CACHED] #{line}"
+            counter 'CACHED'
+
+    # Compare Gzipped HDFS file against the desired S3 key
+    (tmpfile, cb) ->
+      stats = fs.statSync tmpfile
+      s3.headObject s3params, (err, data) ->
+          if err
+            return cb null, tmpfile
+          else if stats?.size == data?.ContentLength
+            status "[SKIPPING] #{line}"
+            counter 'SKIPPED'
+            return cb 'skipping'
+          else
+            status "[OUTOFSYNC] #{line}"
+            return cb null, tmpfile
+
+    (tmpfile, cb) ->
+      stats = fs.statSync tmpfile
+      s3params['Body'] = fs.createReadStream(tmpfile)
+      s3obj = new AWS.S3.ManagedUpload
+        params: s3params
+
+      s3obj.on 'httpUploadProgress', logProgress
+      uploader s3obj, line, tmpfile, retries=3, cb
+
+  ], callback
+
 
 module.exports = ->
 
